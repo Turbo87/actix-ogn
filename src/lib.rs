@@ -140,6 +140,8 @@ impl WriteHandler<io::Error> for OGNActor {
 /// and send them to the `recipient`
 impl StreamHandler<String, io::Error> for OGNActor {
     fn handle(&mut self, msg: String, _: &mut Self::Context) {
+        trace!("{}", msg);
+
         if let Some(record) = OGNPositionRecord::try_parse(&msg) {
             self.recipient.do_send(OGNRecord { record });
         }
