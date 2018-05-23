@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate log;
+
 extern crate tokio_core;
 extern crate tokio_io;
 extern crate regex;
@@ -68,7 +71,7 @@ impl OGNActor {
     /// Schedule sending a "keep alive" message to the server every 30sec
     fn schedule_keepalive(ctx: &mut Context<Self>) {
         ctx.run_later(Duration::from_secs(30), |act, ctx| {
-            println!("sending keepalive");
+            info!("Sending keepalive to OGN server");
             if let Some(ref mut framed) = act.cell {
                 framed.write("# keep alive".to_string());
             }
@@ -81,14 +84,14 @@ impl Actor for OGNActor {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
-        println!("Connected to the OGN server");
+        info!("Connecting to OGN server...");
 
         Connector::from_registry()
             .send(Connect::host("glidern1.glidernet.org:10152"))
             .into_actor(self)
             .map(|res, act, ctx| match res {
                 Ok(stream) => {
-                    println!("Connected to OGN server");
+                    info!("Connected to OGN server");
 
                     let (r, w) = stream.split();
 
@@ -108,19 +111,19 @@ impl Actor for OGNActor {
                     OGNActor::schedule_keepalive(ctx);
                 }
                 Err(err) => {
-                    println!("Can not connect to OGN server: {}", err);
+                    error!("Can not connect to OGN server: {}", err);
                     ctx.stop();
                 }
             })
             .map_err(|err, _act, ctx| {
-                println!("Can not connect to OGN server: {}", err);
+                error!("Can not connect to OGN server: {}", err);
                 ctx.stop();
             })
             .wait(ctx);
     }
 
     fn stopped(&mut self, _: &mut Context<Self>) {
-        println!("Disconnected from OGN server");
+        info!("Disconnected from OGN server");
     }
 }
 

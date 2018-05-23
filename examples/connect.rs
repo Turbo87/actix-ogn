@@ -1,5 +1,6 @@
 extern crate actix;
 extern crate actix_ogn;
+extern crate pretty_env_logger;
 
 use actix::*;
 use actix_ogn::{OGNActor, OGNRecord};
@@ -19,6 +20,8 @@ impl Handler<OGNRecord> for ConsoleLogger {
 }
 
 fn main() {
+    pretty_env_logger::init();
+
     let sys = actix::System::new("test");
 
     // Start "console logger" actor in separate thread
