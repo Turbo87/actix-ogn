@@ -3,7 +3,7 @@ extern crate actix_ogn;
 extern crate pretty_env_logger;
 
 use actix::*;
-use actix_ogn::{OGNActor, OGNRecord};
+use actix_ogn::{OGNActor, OGNMessage};
 
 pub struct ConsoleLogger;
 
@@ -11,11 +11,11 @@ impl Actor for ConsoleLogger {
     type Context = Context<Self>;
 }
 
-impl Handler<OGNRecord> for ConsoleLogger {
+impl Handler<OGNMessage> for ConsoleLogger {
     type Result = ();
 
-    fn handle(&mut self, record: OGNRecord, _: &mut Context<Self>) {
-        println!("{}", record.record.raw);
+    fn handle(&mut self, message: OGNMessage, _: &mut Context<Self>) {
+        println!("{}", message.raw);
     }
 }
 

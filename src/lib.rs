@@ -3,12 +3,11 @@ extern crate log;
 
 extern crate tokio_core;
 extern crate tokio_io;
-extern crate regex;
-#[macro_use]
-extern crate lazy_static;
 
 #[macro_use]
 extern crate actix;
+
+extern crate aprs_parser;
 
 use std::io;
 use std::time::Duration;
@@ -21,50 +20,21 @@ use tokio_io::codec::{FramedRead, LinesCodec};
 use tokio_io::io::WriteHalf;
 use tokio_io::AsyncRead;
 
-use regex::Regex;
-
 /// Received a position record from the OGN client.
 #[derive(Message, Clone)]
-pub struct OGNRecord {
-    pub record: OGNPositionRecord,
-}
-
-#[derive(Clone)]
-pub struct OGNPositionRecord {
+pub struct OGNMessage {
+    pub message: aprs_parser::APRSMessage,
     pub raw: String,
-    pub latitude: f64,
-    pub longitude: f64,
-}
-
-impl OGNPositionRecord {
-    /// Parse latitude and longitude from the raw APRS record
-    pub fn try_parse(raw: &str) -> Option<OGNPositionRecord> {
-        lazy_static! {
-            static ref RE: Regex = Regex::new(r"([/@])(\d{6}h)(\d{2})(\d{2}.\d{2})([NS]).(\d{2})(\d{3}.\d{2})([EW])").unwrap();
-        }
-
-        RE.captures(raw).map(|cap| {
-            let latitude = (cap.get(3).unwrap().as_str().parse::<f64>().unwrap()
-                + cap.get(4).unwrap().as_str().parse::<f64>().unwrap() / 60.)
-                * if cap.get(4).unwrap().as_str() == "S" { -1. } else { 1. };
-
-            let longitude = (cap.get(6).unwrap().as_str().parse::<f64>().unwrap()
-                + cap.get(7).unwrap().as_str().parse::<f64>().unwrap() / 60.)
-                * if cap.get(8).unwrap().as_str() == "W" { -1. } else { 1. };
-
-            OGNPositionRecord { raw: raw.to_string(), latitude, longitude }
-        })
-    }
 }
 
 /// An actor that connects to the [OGN](https://www.glidernet.org/) APRS servers
 pub struct OGNActor {
-    recipient: Recipient<Syn, OGNRecord>,
+    recipient: Recipient<Syn, OGNMessage>,
     cell: Option<FramedWrite<WriteHalf<TcpStream>, LinesCodec>>,
 }
 
 impl OGNActor {
-    pub fn new(recipient: Recipient<Syn, OGNRecord>) -> OGNActor {
+    pub fn new(recipient: Recipient<Syn, OGNMessage>) -> OGNActor {
         OGNActor { recipient, cell: None }
     }
 
@@ -139,11 +109,21 @@ impl WriteHandler<io::Error> for OGNActor {
 /// Parse received lines into `OGNPositionRecord` instances
 /// and send them to the `recipient`
 impl StreamHandler<String, io::Error> for OGNActor {
-    fn handle(&mut self, msg: String, _: &mut Self::Context) {
-        trace!("{}", msg);
+    fn handle(&mut self, raw: String, _: &mut Self::Context) {
+        if raw.starts_with('#') {
+            info!("{}", raw);
+        } else {
+            trace!("{}", raw);
 
-        if let Some(record) = OGNPositionRecord::try_parse(&msg) {
-            self.recipient.do_send(OGNRecord { record });
+            match aprs_parser::parse(&raw) {
+                Ok(message) => {
+                    trace!("{:?}", message);
+                    self.recipient.do_send(OGNMessage { message, raw });
+                },
+                Err(error) => {
+                    warn!("ParseError: {}", error);
+                }
+            };
         }
     }
 }
