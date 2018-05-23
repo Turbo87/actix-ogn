@@ -121,10 +121,6 @@ impl Actor for OGNActor {
             })
             .wait(ctx);
     }
-
-    fn stopped(&mut self, _: &mut Context<Self>) {
-        info!("Disconnected from OGN server");
-    }
 }
 
 impl Supervised for OGNActor {
