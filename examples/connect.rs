@@ -2,7 +2,7 @@ extern crate actix;
 extern crate actix_ogn;
 
 use actix::*;
-use actix_ogn::{OGNClient, OGNRecord};
+use actix_ogn::{OGNActor, OGNRecord};
 
 pub struct ConsoleLogger;
 
@@ -26,7 +26,7 @@ fn main() {
 
     // Start OGN client in separate thread
     let l = logger.clone();
-    Arbiter::start(|_| OGNClient::new(l.recipient()));
+    Arbiter::start(|_| OGNActor::new(l.recipient()));
 
     sys.run();
 }

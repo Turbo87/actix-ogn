@@ -55,14 +55,14 @@ impl OGNPositionRecord {
 }
 
 /// An actor that connects to the [OGN](https://www.glidernet.org/) APRS servers
-pub struct OGNClient {
+pub struct OGNActor {
     recipient: Recipient<Syn, OGNRecord>,
     cell: Option<FramedWrite<WriteHalf<TcpStream>, LinesCodec>>,
 }
 
-impl OGNClient {
-    pub fn new(recipient: Recipient<Syn, OGNRecord>) -> OGNClient {
-        OGNClient { recipient, cell: None }
+impl OGNActor {
+    pub fn new(recipient: Recipient<Syn, OGNRecord>) -> OGNActor {
+        OGNActor { recipient, cell: None }
     }
 
     /// Schedule sending a "keep alive" message to the server every 30sec
@@ -72,12 +72,12 @@ impl OGNClient {
             if let Some(ref mut framed) = act.cell {
                 framed.write("# keep alive".to_string());
             }
-            OGNClient::schedule_keepalive(ctx);
+            OGNActor::schedule_keepalive(ctx);
         });
     }
 }
 
-impl Actor for OGNClient {
+impl Actor for OGNActor {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
@@ -105,7 +105,7 @@ impl Actor for OGNClient {
                     ctx.add_stream(FramedRead::new(r, LinesCodec::new()));
 
                     // schedule sending a "keep alive" message to the server every 30sec
-                    OGNClient::schedule_keepalive(ctx);
+                    OGNActor::schedule_keepalive(ctx);
                 }
                 Err(err) => {
                     println!("Can not connect to OGN server: {}", err);
@@ -124,11 +124,11 @@ impl Actor for OGNClient {
     }
 }
 
-impl actix::io::WriteHandler<io::Error> for OGNClient {}
+impl actix::io::WriteHandler<io::Error> for OGNActor {}
 
 /// Parse received lines into `OGNPositionRecord` instances
 /// and send them to the `recipient`
-impl StreamHandler<String, io::Error> for OGNClient {
+impl StreamHandler<String, io::Error> for OGNActor {
     fn handle(&mut self, msg: String, _: &mut Self::Context) {
         if let Some(record) = OGNPositionRecord::try_parse(&msg) {
             self.recipient.do_send(OGNRecord { record });
