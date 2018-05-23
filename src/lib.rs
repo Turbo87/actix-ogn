@@ -127,6 +127,12 @@ impl Actor for OGNActor {
     }
 }
 
+impl Supervised for OGNActor {
+    fn restarting(&mut self, _: &mut Self::Context) {
+        self.cell.take();
+    }
+}
+
 impl WriteHandler<io::Error> for OGNActor {
     fn error(&mut self, err: io::Error, _: &mut Self::Context) -> Running {
         warn!("OGN connection dropped: error: {}", err);
