@@ -18,7 +18,7 @@ mod ogn_client;
 mod gateway;
 mod ws_client;
 
-use ogn_client::OGNClient;
+pub use ogn_client::{OGNClient, OGNRecord};
 
 fn main() {
     let sys = actix::System::new("ogn-ws-gateway");
