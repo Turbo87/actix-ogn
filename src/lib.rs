@@ -15,7 +15,7 @@ use std::time::Duration;
 
 use actix::actors::{Connect, Connector};
 use actix::prelude::*;
-use actix::io::FramedWrite;
+use actix::io::{FramedWrite, WriteHandler};
 use tokio_core::net::TcpStream;
 use tokio_io::codec::{FramedRead, LinesCodec};
 use tokio_io::io::WriteHalf;
@@ -96,7 +96,7 @@ impl Actor for OGNActor {
                     let (r, w) = stream.split();
 
                     // configure write side of the connection
-                    let mut framed = actix::io::FramedWrite::new(w, LinesCodec::new(), ctx);
+                    let mut framed = FramedWrite::new(w, LinesCodec::new(), ctx);
 
                     // send login message
                     framed.write("user test pass -1 vers test 1.0".to_string());
@@ -127,7 +127,7 @@ impl Actor for OGNActor {
     }
 }
 
-impl actix::io::WriteHandler<io::Error> for OGNActor {
+impl WriteHandler<io::Error> for OGNActor {
     fn error(&mut self, err: io::Error, _: &mut Self::Context) -> Running {
         warn!("OGN connection dropped: error: {}", err);
         Running::Stop
