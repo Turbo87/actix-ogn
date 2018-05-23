@@ -127,7 +127,12 @@ impl Actor for OGNActor {
     }
 }
 
-impl actix::io::WriteHandler<io::Error> for OGNActor {}
+impl actix::io::WriteHandler<io::Error> for OGNActor {
+    fn error(&mut self, err: io::Error, _: &mut Self::Context) -> Running {
+        warn!("OGN connection dropped: error: {}", err);
+        Running::Stop
+    }
+}
 
 /// Parse received lines into `OGNPositionRecord` instances
 /// and send them to the `recipient`
