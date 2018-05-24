@@ -49,7 +49,7 @@ fn main() {
 
     // Start OGN client in separate thread
     let l = logger.clone();
-    Arbiter::start(|_| OGNActor::new(l.recipient()));
+    let _addr: Addr<Unsync, _> = Supervisor::start(|_| OGNActor::new(l.recipient()));
 
     sys.run();
 }
