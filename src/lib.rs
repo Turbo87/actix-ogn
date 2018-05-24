@@ -114,6 +114,7 @@ impl Actor for OGNActor {
 
 impl Supervised for OGNActor {
     fn restarting(&mut self, _: &mut Self::Context) {
+        info!("Restarting OGN client...");
         self.cell.take();
     }
 }
