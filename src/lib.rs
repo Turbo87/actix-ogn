@@ -69,7 +69,22 @@ impl Actor for OGNActor {
                     let mut framed = FramedWrite::new(w, LinesCodec::new(), ctx);
 
                     // send login message
-                    framed.write("user test pass -1 vers test 1.0".to_string());
+                    let login_message = {
+                        let username = "test";
+                        let password = "-1";
+                        let app_name = option_env!("CARGO_PKG_NAME").unwrap_or("unknown");
+                        let app_version = option_env!("CARGO_PKG_VERSION").unwrap_or("0.0.0");
+
+                        format!(
+                            "user {} pass {} vers {} {}",
+                            username,
+                            password,
+                            app_name,
+                            app_version,
+                        )
+                    };
+
+                    framed.write(login_message);
 
                     // save writer for later
                     act.cell = Some(framed);
