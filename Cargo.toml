@@ -2,6 +2,13 @@
 name = "actix-ogn"
 version = "0.1.0"
 authors = ["Tobias Bieniek <tobias.bieniek@gmail.com>"]
+description = "OpenGliderNetwork client based on actix"
+readme = "README.md"
+keywords = ["ogn", "actix", "aprs", "openglidernetwork", "glider"]
+homepage = "https://github.com/Turbo87/actix-ogn/"
+repository = "https://github.com/Turbo87/actix-ogn.git"
+license = "MIT/Apache-2.0"
+exclude = [".gitignore", ".travis.yml"]
 
 [dependencies]
 actix = "0.5"
