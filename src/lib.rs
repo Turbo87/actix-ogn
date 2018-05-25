@@ -159,7 +159,10 @@ impl StreamHandler<String, io::Error> for OGNActor {
             match aprs_parser::parse(&raw) {
                 Ok(message) => {
                     trace!("{:?}", message);
-                    self.recipient.do_send(OGNMessage { message, raw });
+
+                    if let Err(error) = self.recipient.do_send(OGNMessage { message, raw }) {
+                        warn!("do_send failed: {}", error);
+                    }
                 },
                 Err(error) => {
                     warn!("ParseError: {}", error);
