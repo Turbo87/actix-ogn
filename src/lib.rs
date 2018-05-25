@@ -8,6 +8,7 @@ extern crate tokio_io;
 extern crate actix;
 
 extern crate aprs_parser;
+extern crate backoff;
 
 use std::io;
 use std::time::Duration;
@@ -20,6 +21,9 @@ use tokio_io::codec::{FramedRead, LinesCodec};
 use tokio_io::io::WriteHalf;
 use tokio_io::AsyncRead;
 
+use backoff::backoff::Backoff;
+use backoff::ExponentialBackoff;
+
 /// Received a position record from the OGN client.
 #[derive(Message, Clone)]
 pub struct OGNMessage {
@@ -30,12 +34,14 @@ pub struct OGNMessage {
 /// An actor that connects to the [OGN](https://www.glidernet.org/) APRS servers
 pub struct OGNActor {
     recipient: Recipient<Syn, OGNMessage>,
+    backoff: ExponentialBackoff,
     cell: Option<FramedWrite<WriteHalf<TcpStream>, LinesCodec>>,
 }
 
 impl OGNActor {
     pub fn new(recipient: Recipient<Syn, OGNMessage>) -> OGNActor {
-        OGNActor { recipient, cell: None }
+        let backoff = ExponentialBackoff::default();
+        OGNActor { recipient, backoff, cell: None }
     }
 
     /// Schedule sending a "keep alive" message to the server every 30sec
@@ -62,6 +68,9 @@ impl Actor for OGNActor {
             .map(|res, act, ctx| match res {
                 Ok(stream) => {
                     info!("Connected to OGN server");
+
+                    // reset exponential backoff algorithm
+                    act.backoff.reset();
 
                     let (r, w) = stream.split();
 
@@ -97,12 +106,24 @@ impl Actor for OGNActor {
                 }
                 Err(err) => {
                     error!("Can not connect to OGN server: {}", err);
-                    ctx.stop();
+
+                    // re-connect with exponential backoff
+                    if let Some(timeout) = act.backoff.next_backoff() {
+                        ctx.run_later(timeout, |_, ctx| ctx.stop());
+                    } else {
+                        ctx.stop();
+                    }
                 }
             })
-            .map_err(|err, _act, ctx| {
+            .map_err(|err, act, ctx| {
                 error!("Can not connect to OGN server: {}", err);
-                ctx.stop();
+
+                // re-connect with exponential backoff
+                if let Some(timeout) = act.backoff.next_backoff() {
+                    ctx.run_later(timeout, |_, ctx| ctx.stop());
+                } else {
+                    ctx.stop();
+                }
             })
             .wait(ctx);
     }
