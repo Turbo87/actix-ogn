@@ -40,7 +40,9 @@ pub struct OGNActor {
 
 impl OGNActor {
     pub fn new(recipient: Recipient<Syn, OGNMessage>) -> OGNActor {
-        let backoff = ExponentialBackoff::default();
+        let mut backoff = ExponentialBackoff::default();
+        backoff.max_elapsed_time = None;
+
         OGNActor { recipient, backoff, cell: None }
     }
 
