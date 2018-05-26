@@ -65,7 +65,7 @@ impl Actor for OGNActor {
         info!("Connecting to OGN server...");
 
         Connector::from_registry()
-            .send(Connect::host("glidern1.glidernet.org:10152"))
+            .send(Connect::host("aprs.glidernet.org:10152"))
             .into_actor(self)
             .map(|res, act, ctx| match res {
                 Ok(stream) => {
