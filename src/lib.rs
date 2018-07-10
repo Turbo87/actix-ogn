@@ -35,7 +35,7 @@ pub struct OGNMessage {
 pub struct OGNActor {
     recipient: Recipient<Syn, OGNMessage>,
     backoff: ExponentialBackoff,
-    cell: Option<FramedWrite<WriteHalf<TcpStream>, LinesCodec>>,
+    writer: Option<FramedWrite<WriteHalf<TcpStream>, LinesCodec>>,
 }
 
 impl OGNActor {
@@ -43,15 +43,15 @@ impl OGNActor {
         let mut backoff = ExponentialBackoff::default();
         backoff.max_elapsed_time = None;
 
-        OGNActor { recipient, backoff, cell: None }
+        OGNActor { recipient, backoff, writer: None }
     }
 
     /// Schedule sending a "keep alive" message to the server every 30sec
     fn schedule_keepalive(ctx: &mut Context<Self>) {
         ctx.run_later(Duration::from_secs(30), |act, ctx| {
             info!("Sending keepalive to OGN server");
-            if let Some(ref mut framed) = act.cell {
-                framed.write("# keep alive".to_string());
+            if let Some(ref mut writer) = act.writer {
+                writer.write("# keep alive".to_string());
             }
             OGNActor::schedule_keepalive(ctx);
         });
@@ -77,7 +77,7 @@ impl Actor for OGNActor {
                     let (r, w) = stream.split();
 
                     // configure write side of the connection
-                    let mut framed = FramedWrite::new(w, LinesCodec::new(), ctx);
+                    let mut writer = FramedWrite::new(w, LinesCodec::new(), ctx);
 
                     // send login message
                     let login_message = {
@@ -95,10 +95,10 @@ impl Actor for OGNActor {
                         )
                     };
 
-                    framed.write(login_message);
+                    writer.write(login_message);
 
                     // save writer for later
-                    act.cell = Some(framed);
+                    act.writer = Some(writer);
 
                     // read side of the connection
                     ctx.add_stream(FramedRead::new(r, LinesCodec::new()));
@@ -138,7 +138,7 @@ impl Actor for OGNActor {
 impl Supervised for OGNActor {
     fn restarting(&mut self, _: &mut Self::Context) {
         info!("Restarting OGN client...");
-        self.cell.take();
+        self.writer.take();
     }
 }
 
