@@ -8,7 +8,6 @@ extern crate tokio_tcp;
 #[macro_use]
 extern crate actix;
 
-extern crate aprs_parser;
 extern crate backoff;
 
 use std::io;
@@ -28,7 +27,6 @@ use backoff::ExponentialBackoff;
 /// Received a position record from the OGN client.
 #[derive(Message, Clone)]
 pub struct OGNMessage {
-    pub message: aprs_parser::APRSMessage,
     pub raw: String,
 }
 
@@ -150,27 +148,15 @@ impl WriteHandler<io::Error> for OGNActor {
     }
 }
 
-/// Parse received lines into `OGNPositionRecord` instances
-/// and send them to the `recipient`
+/// Send received lines to the `recipient`
 impl StreamHandler<String, io::Error> for OGNActor {
-    fn handle(&mut self, raw: String, _: &mut Self::Context) {
-        if raw.starts_with('#') {
-            info!("{}", raw);
-        } else {
-            trace!("{}", raw);
+    fn handle(&mut self, line: String, c: &mut Self::Context) {
+        trace!("{}", line);
 
-            match aprs_parser::parse(&raw) {
-                Ok(message) => {
-                    trace!("{:?}", message);
-
-                    if let Err(error) = self.recipient.do_send(OGNMessage { message, raw }) {
-                        warn!("do_send failed: {}", error);
-                    }
-                },
-                Err(error) => {
-                    warn!("ParseError: {}", error);
-                }
-            };
+        if !line.starts_with('#') {
+            if let Err(error) = self.recipient.do_send(OGNMessage { raw: line }) {
+                warn!("do_send failed: {}", error);
+            }
         }
     }
 }
