@@ -11,12 +11,13 @@ license = "MIT/Apache-2.0"
 exclude = [".gitignore", ".travis.yml"]
 
 [dependencies]
-actix = "0.5"
+actix = "0.7"
 aprs-parser = "^0.1.1"
 backoff = "0.1.2"
 log = "0.4"
-tokio-core = "0.1"
+tokio-codec = "0.1"
 tokio-io = "0.1"
+tokio-tcp = "0.1"
 
 [dev-dependencies]
 pretty_env_logger = "0.2"

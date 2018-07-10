@@ -45,11 +45,11 @@ fn main() {
     let sys = actix::System::new("test");
 
     // Start "console logger" actor in separate thread
-    let logger: Addr<Syn, _> = Arbiter::start(|_| ConsoleLogger);
+    let logger: Addr<_> = Arbiter::start(|_| ConsoleLogger);
 
     // Start OGN client in separate thread
     let l = logger.clone();
-    let _addr: Addr<Unsync, _> = Supervisor::start(|_| OGNActor::new(l.recipient()));
+    let _addr: Addr<_> = Supervisor::start(|_| OGNActor::new(l.recipient()));
 
     sys.run();
 }

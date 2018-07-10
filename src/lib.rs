@@ -1,8 +1,9 @@
 #[macro_use]
 extern crate log;
 
-extern crate tokio_core;
+extern crate tokio_codec;
 extern crate tokio_io;
+extern crate tokio_tcp;
 
 #[macro_use]
 extern crate actix;
@@ -13,11 +14,11 @@ extern crate backoff;
 use std::io;
 use std::time::Duration;
 
-use actix::actors::{Connect, Connector};
+use actix::actors::resolver::{Connect, Resolver};
 use actix::prelude::*;
 use actix::io::{FramedWrite, WriteHandler};
-use tokio_core::net::TcpStream;
-use tokio_io::codec::{FramedRead, LinesCodec};
+use tokio_tcp::TcpStream;
+use tokio_codec::{FramedRead, LinesCodec};
 use tokio_io::io::WriteHalf;
 use tokio_io::AsyncRead;
 
@@ -33,13 +34,13 @@ pub struct OGNMessage {
 
 /// An actor that connects to the [OGN](https://www.glidernet.org/) APRS servers
 pub struct OGNActor {
-    recipient: Recipient<Syn, OGNMessage>,
+    recipient: Recipient<OGNMessage>,
     backoff: ExponentialBackoff,
     writer: Option<FramedWrite<WriteHalf<TcpStream>, LinesCodec>>,
 }
 
 impl OGNActor {
-    pub fn new(recipient: Recipient<Syn, OGNMessage>) -> OGNActor {
+    pub fn new(recipient: Recipient<OGNMessage>) -> OGNActor {
         let mut backoff = ExponentialBackoff::default();
         backoff.max_elapsed_time = None;
 
@@ -64,7 +65,7 @@ impl Actor for OGNActor {
     fn started(&mut self, ctx: &mut Self::Context) {
         info!("Connecting to OGN server...");
 
-        Connector::from_registry()
+        Resolver::from_registry()
             .send(Connect::host("aprs.glidernet.org:10152"))
             .into_actor(self)
             .map(|res, act, ctx| match res {
