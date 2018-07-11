@@ -28,8 +28,7 @@ fn main() {
     let logger: Addr<_> = Arbiter::start(|_| ConsoleLogger);
 
     // Start OGN client in separate thread
-    let l = logger.clone();
-    let _addr: Addr<_> = Supervisor::start(|_| OGNActor::new(l.recipient()));
+    let _addr: Addr<_> = Supervisor::start(move |_| OGNActor::new(logger.recipient()));
 
     sys.run();
 }
