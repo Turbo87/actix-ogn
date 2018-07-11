@@ -150,7 +150,7 @@ impl WriteHandler<io::Error> for OGNActor {
 
 /// Send received lines to the `recipient`
 impl StreamHandler<String, io::Error> for OGNActor {
-    fn handle(&mut self, line: String, c: &mut Self::Context) {
+    fn handle(&mut self, line: String, _: &mut Self::Context) {
         trace!("{}", line);
 
         if !line.starts_with('#') {
