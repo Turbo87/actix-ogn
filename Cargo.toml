@@ -1,6 +1,6 @@
 [package]
 name = "actix-ogn"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Tobias Bieniek <tobias.bieniek@gmail.com>"]
 description = "OpenGliderNetwork client based on actix"
 readme = "README.md"
