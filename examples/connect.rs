@@ -25,7 +25,7 @@ fn main() {
     let sys = actix::System::new("test");
 
     // Start "console logger" actor in separate thread
-    let logger: Addr<_> = Arbiter::start(|_| ConsoleLogger);
+    let logger: Addr<_> = ConsoleLogger.start();
 
     // Start OGN client in separate thread
     let _addr: Addr<_> = Supervisor::start(move |_| OGNActor::new(logger.recipient()));
