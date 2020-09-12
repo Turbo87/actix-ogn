@@ -1,15 +1,3 @@
-#[macro_use]
-extern crate log;
-
-extern crate tokio_codec;
-extern crate tokio_io;
-extern crate tokio_tcp;
-
-#[macro_use]
-extern crate actix;
-
-extern crate backoff;
-
 use std::io;
 use std::time::Duration;
 
@@ -23,6 +11,7 @@ use tokio_io::AsyncRead;
 
 use backoff::backoff::Backoff;
 use backoff::ExponentialBackoff;
+use log::{error, info, trace, warn};
 
 /// Received a position record from the OGN client.
 #[derive(Message, Clone)]
