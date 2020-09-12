@@ -4,6 +4,8 @@
     ":automergePatch",
     ":dependencyDashboard",
     ":maintainLockFilesWeekly",
+    ":prConcurrentLimitNone",
+    ":prHourlyLimitNone",
     ":semanticCommitsDisabled"
   ],
   "packageRules": [
