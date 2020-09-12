@@ -1,20 +1,18 @@
-use std::io;
 use std::time::Duration;
 
 use actix::actors::resolver::{Connect, Resolver};
 use actix::prelude::*;
 use actix::io::{FramedWrite, WriteHandler};
-use tokio_tcp::TcpStream;
-use tokio_codec::{FramedRead, LinesCodec};
-use tokio_io::io::WriteHalf;
-use tokio_io::AsyncRead;
-
 use backoff::backoff::Backoff;
 use backoff::ExponentialBackoff;
 use log::{error, info, trace, warn};
+use tokio::io::WriteHalf;
+use tokio::net::TcpStream;
+use tokio_util::codec::{FramedRead, LinesCodec, LinesCodecError};
 
 /// Received a position record from the OGN client.
 #[derive(Message, Clone)]
+#[rtype(result = "()")]
 pub struct OGNMessage {
     pub raw: String,
 }
@@ -23,7 +21,7 @@ pub struct OGNMessage {
 pub struct OGNActor {
     recipient: Recipient<OGNMessage>,
     backoff: ExponentialBackoff,
-    writer: Option<FramedWrite<WriteHalf<TcpStream>, LinesCodec>>,
+    writer: Option<FramedWrite<String, WriteHalf<TcpStream>, LinesCodec>>,
 }
 
 impl OGNActor {
@@ -56,13 +54,13 @@ impl Actor for OGNActor {
             .send(Connect::host("aprs.glidernet.org:10152"))
             .into_actor(self)
             .map(|res, act, ctx| match res {
-                Ok(stream) => {
+                Ok(Ok(stream)) => {
                     info!("Connected to OGN server");
 
                     // reset exponential backoff algorithm
                     act.backoff.reset();
 
-                    let (r, w) = stream.split();
+                    let (r, w) = tokio::io::split(stream);
 
                     // configure write side of the connection
                     let mut writer = FramedWrite::new(w, LinesCodec::new(), ctx);
@@ -94,7 +92,7 @@ impl Actor for OGNActor {
                     // schedule sending a "keep alive" message to the server every 30sec
                     OGNActor::schedule_keepalive(ctx);
                 }
-                Err(err) => {
+                Ok(Err(err)) => {
                     error!("Can not connect to OGN server: {}", err);
 
                     // re-connect with exponential backoff
@@ -104,15 +102,15 @@ impl Actor for OGNActor {
                         ctx.stop();
                     }
                 }
-            })
-            .map_err(|err, act, ctx| {
-                error!("Can not connect to OGN server: {}", err);
+                Err(err) => {
+                    error!("Can not connect to OGN server: {}", err);
 
-                // re-connect with exponential backoff
-                if let Some(timeout) = act.backoff.next_backoff() {
-                    ctx.run_later(timeout, |_, ctx| ctx.stop());
-                } else {
-                    ctx.stop();
+                    // re-connect with exponential backoff
+                    if let Some(timeout) = act.backoff.next_backoff() {
+                        ctx.run_later(timeout, |_, ctx| ctx.stop());
+                    } else {
+                        ctx.stop();
+                    }
                 }
             })
             .wait(ctx);
@@ -130,21 +128,23 @@ impl Supervised for OGNActor {
     }
 }
 
-impl WriteHandler<io::Error> for OGNActor {
-    fn error(&mut self, err: io::Error, _: &mut Self::Context) -> Running {
+impl WriteHandler<LinesCodecError> for OGNActor {
+    fn error(&mut self, err: LinesCodecError, _: &mut Self::Context) -> Running {
         warn!("OGN connection dropped: error: {}", err);
         Running::Stop
     }
 }
 
 /// Send received lines to the `recipient`
-impl StreamHandler<String, io::Error> for OGNActor {
-    fn handle(&mut self, line: String, _: &mut Self::Context) {
-        trace!("{}", line);
+impl StreamHandler<Result<String, LinesCodecError>> for OGNActor {
+    fn handle(&mut self, line: Result<String, LinesCodecError>, _: &mut Self::Context) {
+        if let Ok(line) = line {
+            trace!("{}", line);
 
-        if !line.starts_with('#') {
-            if let Err(error) = self.recipient.do_send(OGNMessage { raw: line }) {
-                warn!("do_send failed: {}", error);
+            if !line.starts_with('#') {
+                if let Err(error) = self.recipient.do_send(OGNMessage { raw: line }) {
+                    warn!("do_send failed: {}", error);
+                }
             }
         }
     }
