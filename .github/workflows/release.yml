@@ -25,7 +25,7 @@ jobs:
           command: login
           args: ${{ secrets.CRATES_IO_TOKEN }}
 
-      - name: cargo login
+      - name: cargo publish
         uses: actions-rs/cargo@v1
         with:
           command: publish
