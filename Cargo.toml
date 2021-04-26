@@ -12,7 +12,7 @@ license = "MIT/Apache-2.0"
 exclude = [".gitignore", ".travis.yml"]
 
 [dependencies]
-actix = "0.10"
+actix = "0.11"
 backoff = "0.2.1"
 log = "0.4"
 tokio = { version = "0.2", default-features=false, features=["tcp", "time", "signal", "io-util"] }
