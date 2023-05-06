@@ -1,8 +1,9 @@
 use std::time::Duration;
 
-use actix::actors::resolver::{Connect, Resolver};
-use actix::prelude::*;
 use actix::io::{FramedWrite, WriteHandler};
+use actix::prelude::*;
+use actix_service::Service;
+use actix_tls::connect::Connector;
 use backoff::backoff::Backoff;
 use backoff::ExponentialBackoff;
 use log::{error, info, trace, warn};
@@ -54,16 +55,18 @@ impl Actor for OGNActor {
     fn started(&mut self, ctx: &mut Self::Context) {
         info!("Connecting to OGN server...");
 
-        Resolver::from_registry()
-            .send(Connect::host("aprs.glidernet.org:10152"))
+        Connector::default()
+            .service()
+            .call("aprs.glidernet.org:10152".into())
             .into_actor(self)
             .map(|res, act, ctx| match res {
-                Ok(Ok(stream)) => {
+                Ok(connection) => {
                     info!("Connected to OGN server");
 
                     // reset exponential backoff algorithm
                     act.backoff.reset();
 
+                    let (stream, _) = connection.into_parts();
                     let (r, w) = tokio::io::split(stream);
 
                     // configure write side of the connection
@@ -92,16 +95,6 @@ impl Actor for OGNActor {
 
                     // schedule sending a "keep alive" message to the server every 30sec
                     OGNActor::schedule_keepalive(ctx);
-                }
-                Ok(Err(err)) => {
-                    error!("Can not connect to OGN server: {}", err);
-
-                    // re-connect with exponential backoff
-                    if let Some(timeout) = act.backoff.next_backoff() {
-                        ctx.run_later(timeout, |_, ctx| ctx.stop());
-                    } else {
-                        ctx.stop();
-                    }
                 }
                 Err(err) => {
                     error!("Can not connect to OGN server: {}", err);
@@ -143,7 +136,7 @@ impl StreamHandler<Result<String, LinesCodecError>> for OGNActor {
             trace!("{}", line);
 
             if !line.starts_with('#') {
-                if let Err(error) = self.recipient.do_send(OGNMessage { raw: line }) {
+                if let Err(error) = self.recipient.try_send(OGNMessage { raw: line }) {
                     warn!("do_send failed: {}", error);
                 }
             }
