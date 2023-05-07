@@ -29,7 +29,11 @@ impl OGNActor {
         let mut backoff = ExponentialBackoff::default();
         backoff.max_elapsed_time = None;
 
-        OGNActor { recipient, backoff, writer: None }
+        OGNActor {
+            recipient,
+            backoff,
+            writer: None,
+        }
     }
 
     /// Schedule sending a "keep alive" message to the server every 30sec
@@ -74,10 +78,7 @@ impl Actor for OGNActor {
 
                         format!(
                             "user {} pass {} vers {} {}",
-                            username,
-                            password,
-                            app_name,
-                            app_version,
+                            username, password, app_name, app_version,
                         )
                     };
 
