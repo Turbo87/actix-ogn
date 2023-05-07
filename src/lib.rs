@@ -126,22 +126,43 @@ impl Supervised for OGNActor {
 
 impl WriteHandler<LinesCodecError> for OGNActor {
     fn error(&mut self, err: LinesCodecError, _: &mut Self::Context) -> Running {
-        warn!("OGN connection dropped: error: {}", err);
+        warn!("OGN write error: {}", err);
         Running::Stop
     }
+
+    fn finished(&mut self, ctx: &mut Self::Context) {
+        info!("OGN write stream ended");
+        ctx.stop() // reconnect later when restarted via supervisor
+    }
+
 }
 
 /// Send received lines to the `recipient`
 impl StreamHandler<Result<String, LinesCodecError>> for OGNActor {
     fn handle(&mut self, line: Result<String, LinesCodecError>, _: &mut Self::Context) {
-        if let Ok(line) = line {
-            trace!("{}", line);
-
-            if !line.starts_with('#') {
-                if let Err(error) = self.recipient.try_send(OGNMessage { raw: line }) {
-                    warn!("do_send failed: {}", error);
+        match line {
+            Ok(line) => {
+                if !line.starts_with('#') {
+                    trace!("Line: {}", line);
+                    if let Err(error) = self.recipient.try_send(OGNMessage { raw: line }) {
+                        warn!("try_send failed: {}", error);
+                    }
+                } else if let Some(message) = line.strip_prefix("# ") {
+                    // # <control message>
+                    debug!("Control: {}", message)
+                } else {
+                    // #<control message>
+                    debug!("Control: {}", &line[1..])
                 }
             }
+            Err(err) => {
+                error!("OGN receive error: {}", err);
+            }
         }
+    }
+
+    fn finished(&mut self, ctx: &mut Self::Context) {
+        info!("OGN read stream ended");
+        ctx.stop() // reconnect later when restarted via supervisor
     }
 }
