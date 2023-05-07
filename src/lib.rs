@@ -6,7 +6,7 @@ use actix_service::Service;
 use actix_tls::connect::Connector;
 use backoff::backoff::Backoff;
 use backoff::ExponentialBackoff;
-use log::{error, info, trace, warn};
+use log::{debug, error, info, trace, warn};
 use tokio::io::WriteHalf;
 use tokio::net::TcpStream;
 use tokio_util::codec::{FramedRead, LinesCodec, LinesCodecError};
@@ -40,9 +40,11 @@ impl OGNActor {
     /// Schedule sending a "keep alive" message to the server every 30sec
     fn schedule_keepalive(ctx: &mut Context<Self>) {
         ctx.run_later(Duration::from_secs(30), |act, ctx| {
-            info!("Sending keepalive to OGN server");
             if let Some(ref mut writer) = act.writer {
+                debug!("Sending keepalive to OGN server");
                 writer.write("# keep alive".to_string());
+            } else {
+                warn!("Cannot send keepalive to OGN server, writer not set");
             }
             OGNActor::schedule_keepalive(ctx);
         });
