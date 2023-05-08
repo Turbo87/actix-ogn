@@ -9,6 +9,12 @@ pub struct ConsoleLogger;
 
 impl Actor for ConsoleLogger {
     type Context = Context<Self>;
+
+    fn started(&mut self, ctx: &mut Self::Context) {
+        // Increase mailbox size from 16 to 128 to handle bursts of messages better.
+        // Otherwise try_send of OGNActor may discard messages when the system is under load.
+        ctx.set_mailbox_capacity(128);
+    }
 }
 
 impl Handler<OGNMessage> for ConsoleLogger {
@@ -19,16 +25,11 @@ impl Handler<OGNMessage> for ConsoleLogger {
     }
 }
 
-fn main() {
+#[actix::main]
+async fn main() {
     pretty_env_logger::init();
-
-    let sys = actix::System::new("test");
-
-    // Start "console logger" actor in separate thread
-    let logger: Addr<_> = ConsoleLogger.start();
-
-    // Start OGN client in separate thread
-    let _addr: Addr<_> = Supervisor::start(move |_| OGNActor::new(logger.recipient()));
-
-    sys.run();
+    let logger = ConsoleLogger.start();
+    let _ogn_addr = Supervisor::start(|_| OGNActor::new(logger.recipient()));
+    tokio::signal::ctrl_c().await.unwrap();
+    System::current().stop();
 }

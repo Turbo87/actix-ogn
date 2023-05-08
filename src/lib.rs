@@ -1,14 +1,18 @@
 use std::time::Duration;
 
-use actix::actors::resolver::{Connect, Resolver};
-use actix::prelude::*;
 use actix::io::{FramedWrite, WriteHandler};
+use actix::prelude::*;
+use actix_service::Service;
+use actix_tls::connect::Connector;
 use backoff::backoff::Backoff;
 use backoff::ExponentialBackoff;
-use log::{error, info, trace, warn};
+use log::{debug, error, info, trace, warn};
 use tokio::io::WriteHalf;
 use tokio::net::TcpStream;
-use tokio_util::codec::{FramedRead, LinesCodec, LinesCodecError};
+use tokio_util::codec::FramedRead;
+
+mod codec;
+use crate::codec::{OGNCodec, OGNCodecError};
 
 /// Received a position record from the OGN client.
 #[derive(Message, Clone)]
@@ -21,7 +25,7 @@ pub struct OGNMessage {
 pub struct OGNActor {
     recipient: Recipient<OGNMessage>,
     backoff: ExponentialBackoff,
-    writer: Option<FramedWrite<String, WriteHalf<TcpStream>, LinesCodec>>,
+    writer: Option<FramedWrite<String, WriteHalf<TcpStream>, OGNCodec>>,
 }
 
 impl OGNActor {
@@ -29,15 +33,21 @@ impl OGNActor {
         let mut backoff = ExponentialBackoff::default();
         backoff.max_elapsed_time = None;
 
-        OGNActor { recipient, backoff, writer: None }
+        OGNActor {
+            recipient,
+            backoff,
+            writer: None,
+        }
     }
 
     /// Schedule sending a "keep alive" message to the server every 30sec
     fn schedule_keepalive(ctx: &mut Context<Self>) {
         ctx.run_later(Duration::from_secs(30), |act, ctx| {
-            info!("Sending keepalive to OGN server");
             if let Some(ref mut writer) = act.writer {
+                debug!("Sending keepalive to OGN server");
                 writer.write("# keep alive".to_string());
+            } else {
+                warn!("Cannot send keepalive to OGN server, writer not set");
             }
             OGNActor::schedule_keepalive(ctx);
         });
@@ -50,20 +60,22 @@ impl Actor for OGNActor {
     fn started(&mut self, ctx: &mut Self::Context) {
         info!("Connecting to OGN server...");
 
-        Resolver::from_registry()
-            .send(Connect::host("aprs.glidernet.org:10152"))
+        Connector::default()
+            .service()
+            .call("aprs.glidernet.org:10152".into())
             .into_actor(self)
             .map(|res, act, ctx| match res {
-                Ok(Ok(stream)) => {
+                Ok(connection) => {
                     info!("Connected to OGN server");
 
                     // reset exponential backoff algorithm
                     act.backoff.reset();
 
+                    let (stream, _) = connection.into_parts();
                     let (r, w) = tokio::io::split(stream);
 
                     // configure write side of the connection
-                    let mut writer = FramedWrite::new(w, LinesCodec::new(), ctx);
+                    let mut writer = FramedWrite::new(w, OGNCodec::new(), ctx);
 
                     // send login message
                     let login_message = {
@@ -74,10 +86,7 @@ impl Actor for OGNActor {
 
                         format!(
                             "user {} pass {} vers {} {}",
-                            username,
-                            password,
-                            app_name,
-                            app_version,
+                            username, password, app_name, app_version,
                         )
                     };
 
@@ -87,20 +96,10 @@ impl Actor for OGNActor {
                     act.writer = Some(writer);
 
                     // read side of the connection
-                    ctx.add_stream(FramedRead::new(r, LinesCodec::new()));
+                    ctx.add_stream(FramedRead::new(r, OGNCodec::new()));
 
                     // schedule sending a "keep alive" message to the server every 30sec
                     OGNActor::schedule_keepalive(ctx);
-                }
-                Ok(Err(err)) => {
-                    error!("Can not connect to OGN server: {}", err);
-
-                    // re-connect with exponential backoff
-                    if let Some(timeout) = act.backoff.next_backoff() {
-                        ctx.run_later(timeout, |_, ctx| ctx.stop());
-                    } else {
-                        ctx.stop();
-                    }
                 }
                 Err(err) => {
                     error!("Can not connect to OGN server: {}", err);
@@ -128,24 +127,44 @@ impl Supervised for OGNActor {
     }
 }
 
-impl WriteHandler<LinesCodecError> for OGNActor {
-    fn error(&mut self, err: LinesCodecError, _: &mut Self::Context) -> Running {
-        warn!("OGN connection dropped: error: {}", err);
+impl WriteHandler<OGNCodecError> for OGNActor {
+    fn error(&mut self, err: OGNCodecError, _: &mut Self::Context) -> Running {
+        warn!("OGN write error: {}", err);
         Running::Stop
+    }
+
+    fn finished(&mut self, ctx: &mut Self::Context) {
+        info!("OGN write stream ended");
+        ctx.stop() // reconnect later when restarted via supervisor
     }
 }
 
 /// Send received lines to the `recipient`
-impl StreamHandler<Result<String, LinesCodecError>> for OGNActor {
-    fn handle(&mut self, line: Result<String, LinesCodecError>, _: &mut Self::Context) {
-        if let Ok(line) = line {
-            trace!("{}", line);
-
-            if !line.starts_with('#') {
-                if let Err(error) = self.recipient.do_send(OGNMessage { raw: line }) {
-                    warn!("do_send failed: {}", error);
+impl StreamHandler<Result<String, OGNCodecError>> for OGNActor {
+    fn handle(&mut self, line: Result<String, OGNCodecError>, _: &mut Self::Context) {
+        match line {
+            Ok(line) => {
+                if !line.starts_with('#') {
+                    trace!("Line: {}", line);
+                    if let Err(error) = self.recipient.try_send(OGNMessage { raw: line }) {
+                        warn!("try_send failed: {}", error);
+                    }
+                } else if let Some(message) = line.strip_prefix("# ") {
+                    // # <control message>
+                    debug!("Control: {}", message)
+                } else {
+                    // #<control message>
+                    debug!("Control: {}", &line[1..])
                 }
             }
+            Err(err) => {
+                error!("OGN receive error: {}", err);
+            }
         }
+    }
+
+    fn finished(&mut self, ctx: &mut Self::Context) {
+        info!("OGN read stream ended");
+        ctx.stop() // reconnect later when restarted via supervisor
     }
 }
