@@ -9,7 +9,10 @@ use backoff::ExponentialBackoff;
 use log::{debug, error, info, trace, warn};
 use tokio::io::WriteHalf;
 use tokio::net::TcpStream;
-use tokio_util::codec::{FramedRead, LinesCodec, LinesCodecError};
+use tokio_util::codec::FramedRead;
+
+mod codec;
+use crate::codec::{OGNCodec, OGNCodecError};
 
 /// Received a position record from the OGN client.
 #[derive(Message, Clone)]
@@ -22,7 +25,7 @@ pub struct OGNMessage {
 pub struct OGNActor {
     recipient: Recipient<OGNMessage>,
     backoff: ExponentialBackoff,
-    writer: Option<FramedWrite<String, WriteHalf<TcpStream>, LinesCodec>>,
+    writer: Option<FramedWrite<String, WriteHalf<TcpStream>, OGNCodec>>,
 }
 
 impl OGNActor {
@@ -72,7 +75,7 @@ impl Actor for OGNActor {
                     let (r, w) = tokio::io::split(stream);
 
                     // configure write side of the connection
-                    let mut writer = FramedWrite::new(w, LinesCodec::new(), ctx);
+                    let mut writer = FramedWrite::new(w, OGNCodec::new(), ctx);
 
                     // send login message
                     let login_message = {
@@ -93,7 +96,7 @@ impl Actor for OGNActor {
                     act.writer = Some(writer);
 
                     // read side of the connection
-                    ctx.add_stream(FramedRead::new(r, LinesCodec::new()));
+                    ctx.add_stream(FramedRead::new(r, OGNCodec::new()));
 
                     // schedule sending a "keep alive" message to the server every 30sec
                     OGNActor::schedule_keepalive(ctx);
@@ -124,8 +127,8 @@ impl Supervised for OGNActor {
     }
 }
 
-impl WriteHandler<LinesCodecError> for OGNActor {
-    fn error(&mut self, err: LinesCodecError, _: &mut Self::Context) -> Running {
+impl WriteHandler<OGNCodecError> for OGNActor {
+    fn error(&mut self, err: OGNCodecError, _: &mut Self::Context) -> Running {
         warn!("OGN write error: {}", err);
         Running::Stop
     }
@@ -134,12 +137,11 @@ impl WriteHandler<LinesCodecError> for OGNActor {
         info!("OGN write stream ended");
         ctx.stop() // reconnect later when restarted via supervisor
     }
-
 }
 
 /// Send received lines to the `recipient`
-impl StreamHandler<Result<String, LinesCodecError>> for OGNActor {
-    fn handle(&mut self, line: Result<String, LinesCodecError>, _: &mut Self::Context) {
+impl StreamHandler<Result<String, OGNCodecError>> for OGNActor {
+    fn handle(&mut self, line: Result<String, OGNCodecError>, _: &mut Self::Context) {
         match line {
             Ok(line) => {
                 if !line.starts_with('#') {
