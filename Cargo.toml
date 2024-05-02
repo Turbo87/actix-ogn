@@ -14,7 +14,7 @@ exclude = [".gitignore", ".travis.yml"]
 [dependencies]
 actix = "0.10"
 backoff = "0.2.1"
-log = "0.4"
+log = "0.4.21"
 tokio = { version = "0.2", default-features=false, features=["tcp", "time", "signal", "io-util"] }
 tokio-util = { version = "0.3", features = ["codec"] }
 
