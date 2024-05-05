@@ -19,4 +19,4 @@ tokio = { version = "0.2", default-features=false, features=["tcp", "time", "sig
 tokio-util = { version = "0.3", features = ["codec"] }
 
 [dev-dependencies]
-pretty_env_logger = "0.4"
+pretty_env_logger = "0.5"
